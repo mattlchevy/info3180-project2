@@ -100,6 +100,56 @@ def logout():
 
 @app.route('/api/users/register', methods=['POST'])
 def register():
+    form = registerform()
+    errors = []
+
+    if request.method == 'POST':
+        if form.validate_on_submit():
+
+            username = form.username.data
+            password = form.password.data
+            fullname = form.fullname.data
+            email = form.email.data
+            location = form.location.data
+            biography = form.biography.data
+            photo = form.photo.data
+            filename = secure_filename(photo.filename)
+            date = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            user1 = Users.query.filter_by(username=username).first()
+            user2 = Users.query.filter_by(email=email).first()
+            if user1 is None:
+                if user2 is None:
+                    
+                    photo.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+
+                    newUser = Users(username=username, password=password, name=fullname, email=email,
+                                    location=location, biography=biography, photo=filename, date=date)
+                    
+                    db.session.add(newUser)
+                    db.session.commit()
+
+                    flash('Registration successful!.', 'success')
+
+                    user = Users.query.filter_by(username=username).first()
+
+                    data = [
+                        {
+                        'id': user.id,
+                        'username': username,
+                        'name': fullname,
+                        'photo': "/uploads/"+filename,
+                        'email': email,
+                        'location': location,
+                        'biography': biography,
+                        'date_joined': date
+                    }]
+
+                    return jsonify(data=data)
+                else:
+                    errors.append("Email already exists")
+            else:
+                errors.append('Username already exists')
+        return jsonify(errors=form_errors(form) + errors)
     form=registerform()
     if request.method =='POST' :
         username=request.form['username']
