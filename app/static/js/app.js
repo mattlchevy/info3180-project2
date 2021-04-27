@@ -80,6 +80,7 @@ app.component('app-footer', {
 const Home = {
     name: 'Home',
     template: `
+    <br><br>
         <div class="d-flex align-items-center home-div col-md-12">
             <div class="row align-items-center col-md-6 intro">
                 <h1 class="font-weight-bold">Buy and Sell Cars Online</h1>
@@ -112,7 +113,8 @@ const Home = {
  
 const registerForm = {
   name:'register-form', 
-  template: `         
+  template: `
+  <br><br> <br><br>         
   <div class="container">
       <div id="centerDiv">
           <div class="register-form center-block">
@@ -122,7 +124,7 @@ const registerForm = {
                       <li v-for="error in errors" class="news__item"> {{ error }}</li>
                   </ul> 
               </div>
-              <h1>Registration New User</h1>
+              <h1>Register New User</h1>
               <form id="registerForm" @submit.prevent="registerUser" method="post" enctype="multipart/form-data">
                   <div class="form-group">
                       <label for="username"><b>Username</b></label> <input class="form-control" id="username" name="username" type="text" value="">
@@ -200,7 +202,7 @@ const registerForm = {
 
 const loginForm = {
   name:'login-form', 
-  template: `
+  template: ` <br><br>
   <div class="center-form m-4 login">
       <h2 class="text-center mb-4">Login to your account</h2>
       <form method="POST" class="form" action="" id="login-form" @submit.prevent="loginUser()">
@@ -291,7 +293,7 @@ const logout = {
 
 const explorepage = {
   name: 'explorepage',
-  template: `
+  template: ` <br><br>
       <div class="container maincontainer" >
           <div id="displayexplore">
               <h2>Explore</h2>
@@ -411,7 +413,7 @@ const explorepage = {
 
 const User_Page = {
   name: 'User_Page',
-  template: `
+  template: ` <br><br>
       <div class="container maincontainer">
           <div id="displayfav">
               <div id="profile">
@@ -515,7 +517,7 @@ const User_Page = {
 
 const Details = {
   name: 'Details',
-  template: `
+  template: ` <br><br>
       <div class="container maincontainer">
           <div id="display-car-details" v-if="details[0]">
               <div id="car-details-card">
@@ -663,7 +665,7 @@ const Details = {
 
 const AddCarForm = {
   name: 'AddCarForm',
-  template: `
+  template: ` <br><br>
   <div class="container maincontainer">
   <div class="m-4 ">
       <h2 id="newcar" class="mb-4" >Add New Car</h2>
