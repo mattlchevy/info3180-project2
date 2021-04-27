@@ -45,7 +45,13 @@ app.component('app-header', {
     </ul>
   </div>
 </nav>
-`
+`, 
+data(){
+    return {}
+},
+methods:{
+    
+}
 });
 
 app.component('app-footer', {
@@ -654,28 +660,22 @@ const Details = {
 const Home = {
   name: 'Home',
   template: `
-  <div>
-      <div id = "message">
+  <div class = "d-flex align-items-center home-div col-md-12">
+    <div id = "message">
         <p class="alert alert-danger" v-if="danger" id = "success"> {{ message }} </p>
-      </div>
-      <div class="row">
-      <div class="col">
-          <h1 style="padding-top: 150px;"> Buy and Sell <br/>Cars Online</h1>
-          <p class="lead">United Auto Sales provides the fastest, easiest and<br/>
-          most user friendly way to buy or sell cars online. Find a<br/>
-          Great Price on the Vehicle You Want.</p>
-          <div class="row" style="padding-right: 450px;">
-              <div class="col-sm-12 text-center">
-              <button @click="$router.push('login')" id="btnLogin" class="btn btn-primary"  type="submit" name="submit"><b>LOGIN</b></button>
-                  <button @click="$router.push('register')" id="btnRegister" class="btn btn-success"  type="submit" name="submit"><b>REGISTER</b></button>
-                  </div>
-              </div>
-          </div>
-      </div>
-              </div>
-          </div>
-      </div>
-      <img style= "padding-bottom: 20px;" id= "redCar"  src="{{ url_for('static', filename='imgs/red_audi-unsplash.jpg') }}" alt="Red Car"/>
+    </div>
+
+    <div class="row align-items-center col-md-6 intro">
+        <h1 class="font-weight-bold">Buy and Sell Cars Online</h1>
+        <p class="mt-2 mb-4 text-secondary">United Auto Sales provides the fastest, easiest and most user friendly way to buy or sell cars online. Find a Great Price on the Vehicle You Want.</p>
+            <div class="flex-area" >
+                <button @click="$router.push('login')" id="btnLogin" class="btn btn-primary"  type="submit" name="submit"><b>LOGIN</b></button>
+                <button @click="$router.push('register')" id="btnRegister" class="btn btn-success"  type="submit" name="submit"><b>REGISTER</b></button>
+            </div>
+    </div>
+    <div class="fit col-md-6">
+        <img class="home_car" src="static/imgs/car.jpg" alt="Red Car"/>
+    </div>
   </div>
   `,
   data() {
