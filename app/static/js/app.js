@@ -88,7 +88,7 @@ const Home = {
                  Find a Great Price on the Vehicle You Want</p>
                 <div class="flex-area">
                     <button @click="toRegister" class="btn bg-primary text-white" type="button">Register</button>
-                    <button @click="toLogin" class="btn text-white" type="button">Login</button>
+                    <button @click="toLogin" class="btn text-white btn_color" type="button">Login</button>
                 </div>
             </div>
             <div class="fit col-md-6">
