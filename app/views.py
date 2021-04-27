@@ -1,110 +1,68 @@
+"""
+Flask Documentation:     http://flask.pocoo.org/docs/
+Jinja2 Documentation:    http://jinja.pocoo.org/2/documentation/
+Werkzeug Documentation:  http://werkzeug.pocoo.org/documentation/
+This file creates your application.
+"""
 
 import os
-from app import app,db, login_manager
-from app.forms import registerform,loginform, CarForm, SearchForm
-from app.models import Users,Cars,Favourites
-from app.config import *
-
-# Using Flask
-from flask import Flask 
-from flask import render_template,request,redirect,url_for,flash,jsonify,send_from_directory, session, abort, g, make_response
-from flask_login import login_user, logout_user, current_user, login_required
-
-from werkzeug.utils import secure_filename
-from werkzeug.security import check_password_hash
-
-
-# Using JWT
 import jwt
-from flask import _request_ctx_stack
-from functools import wraps
 import datetime
+from app import app, db, login_manager, csrf
+from .forms import RegisterForm, LoginForm, ExploreForm, CarForm
+from app.models import Users, Cars, Favourites
+from flask import _request_ctx_stack
+from flask import render_template, request, redirect, url_for, flash, jsonify, g, send_from_directory
+from flask_login import login_user, logout_user, current_user, login_required
+from app.models import Users,Favourites,Cars
+from werkzeug.security import check_password_hash, generate_password_hash
+from werkzeug.utils import secure_filename
+from functools import wraps
 
+#Obtain JWT TOKEN
 def requires_auth(f):
+  @wraps(f)
+  def obtainedToken(*args, **kwargs):
+    auth = request.headers.get('Authorization', None) # or request.cookies.get('token', None)
 
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        auth = request.headers.get('Authorization', None) # or request.cookies.get('token', None)
+    if not auth:
+      return jsonify({'code': 'authorization_header_missing', 'description': 'Authorization header is expected'}), 401
 
-        if not auth:
-            return jsonify({'code': 'authorization_header_missing', 'description': 'Authorization header is expected'}), 401
+    parts = auth.split()
 
-        parts = auth.split()
+    if parts[0].lower() != 'bearer':
+      return jsonify({'code': 'invalid_header', 'description': 'Authorization header must start with Bearer'}), 401
+    elif len(parts) == 1:
+      return jsonify({'code': 'invalid_header', 'description': 'Token not found'}), 401
+    elif len(parts) > 2:
+      return jsonify({'code': 'invalid_header', 'description': 'Authorization header must be Bearer + \s + token'}), 401
 
-        if parts[0].lower() != 'bearer':
+    token = parts[1]
+    try:
+        payload = jwt.decode(token, app.config['SECRET_KEY'], algorithms=["HS256"])
 
-            return jsonify({'code': 'invalid_header', 'description': 'Authorization header must start with Bearer'}), 401
-        elif len(parts) == 1:
-            return jsonify({'code': 'invalid_header', 'description': 'Token not found'}), 401
-        elif len(parts) > 2:
-            return jsonify({'code': 'invalid_header', 'description': 'Authorization header must be Bearer + \s + token'}), 401
+    except jwt.ExpiredSignatureError:
+        return jsonify({'code': 'token_expired', 'description': 'token is expired'}), 401
+    except jwt.DecodeError:
+        return jsonify({'code': 'token_invalid_signature', 'description': 'Token signature is invalid'}), 401
 
-        token = parts[1]
-        try:
-            payload = jwt.decode(token, app.config['SECRET_KEY'], algorithms=["HS256"])
+    g.current_user = user = payload
+    return f(*args, **kwargs)
 
-        except jwt.ExpiredSignatureError:
-            return jsonify({'code': 'token_expired', 'description': 'token is expired'}), 401
-        except jwt.DecodeError:
-            return jsonify({'code': 'token_invalid_signature', 'description': 'Token signature is invalid'}), 401
-
-        g.current_user = user = payload
-        return f(*args, **kwargs)
-
-    return decorated
+  return obtainedToken
 
 ###
 # Routing for your application.
 ###
-@app.route('/api/secure', methods=['GET'])
-@requires_auth
-def api_secure():
-    # This data was retrieved from the payload of the JSON Web Token
-    # take a look at the requires_auth decorator code to see how we decoded
-    # the information from the JWT.
-    user = g.current_user
-    return jsonify(data={"user": user}, message="Success")
-
-
-
-
-@app.route('/api/auth/login',methods=['POST'])
-def login():
-    form=loginform 
-    if request.method=='POST' :
-        username=request.form['username']
-        password=request.form['password']  
-        
-        user=Users.query.filter_by(username=username).first() 
-        
-        if user != None and check_password_hash(user.password, password):
-            login_manager.login_user(user)
-            print(login_manager.current_user.id)
-            return jsonify({"message":"you are now logged in"})
-        return jsonify({"message":"invalid password and/or username"})  
-    
-    errors=form_errors(form) 
-    return jsonify({"errors":errors})
-
-# @app.route('/api/auth/logout', methods=['POST'])
-# @login_required 
-# def logout():
-#     login_manager.logout_user()
-#     return jsonify({'message':"you are now logged out"}) 
-@app.route('/api/auth/logout', methods=['POST'])
-@requires_auth
-@login_required
-def logout():
-    user = g.current_user
-    return jsonify(data={"user": user}, message="You have logged out")
-
-@app.route('/api/users/register', methods=['POST'])
+#Accepts user information and saves it to the database.
+#HTTP Method: 'POST'
+@app.route('/api/register', methods=['POST'])
 def register():
-    form = registerform()
+    form = RegisterForm()
     errors = []
 
     if request.method == 'POST':
-        if form.validate_on_submit():
+        if form.validate_on_submit()==True:
 
             username = form.username.data
             password = form.password.data
@@ -150,154 +108,310 @@ def register():
             else:
                 errors.append('Username already exists')
         return jsonify(errors=form_errors(form) + errors)
-    form=registerform()
-    if request.method =='POST' :
-        username=request.form['username']
-        password=(request.form['password'])
-        """ generate hash ? """
-        firstname=request.form['firstname']
-        lastname=request.form['lastname']
-        email=request.form['email']
-        location=request.form['location']
-        biography=request.form['biography']
-        upload_photo=form.upload_photo.data 
-        join_on=datetime.today()
-        filename=secure_filename(upload_photo.filename)
-        #upload_photo.save(os.path.join(app.config['UPLOAD_FOLDER'],filename))
-        newuser=Users(username=username,password=password,firstname=firstname,lastname=lastname,email=email,location=location,biography=bio,photo=filename,join_on=join_on)
-        if newuser is not None:
-            db.session.add(newuser)
-            db.session.commit() 
-            upload_photo.save(os.path.join(app.config['UPLOAD_FOLDER'],filename))
-            jsonmsg={'message': 'New User Successful added',}  
-            return jsonify(jsonmsg=jsonmsg)
-    else: 
-        errors=form_errors(form) 
-        return jsonify({"errors":errors})
 
-@app.route('/api/cars', methods=['POST','GET'])
-def car():
-    form=CarForm()
-    
-    if request.method == 'POST' and form.validate_on_submit():
-            make=request.form['make']
-            model=request.form['model']
-            colour=request.form['colour']
-            year=request.form['year']
-            price=request.form['price']
-            cartype=request.form['cartype']
-            trans=request.form['transmission']
-            desc=request.form['description']
-            pic=request.files['pic'] 
-            filename=secure_filename(pic.filename)
-            car=Cars(make=make,model=model,colour=colour, year=year, transmission=trans,car_type=cartype,price=price,description=desc,photo=filename,user_id=g.current_user["userid"])
-            if car is not None:
-                db.session.add(car)
-                db.session.commit()
-                pic.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-                jsonmsg=jsonify(message="Car Successful Added")         
-                return jsonmsg
-            else:
-                err=form_errors(form)
-                jsonErr=jsonify(errors=err)
-                return jsonErr
-            
-    if request.method == 'GET':
-        carzz=[]
-        cars=Cars.query.order_by(Cars.id).all()
-        for c in cars:
-            car={}
-            car['id']=c.id
-            car["user_id"]=c.user_id
-            car["year"]=c.year        
-            car["price"]=c.price
-            car["photo"]=c.photo
-            car["make"]=c.make
-            car["model"]=c.model
-            carzz.append(car)
-            return jsonify(allcars=carzz)
+#Accepts login credentials as username and password.
+#HTTP Method: 'POST'
+@app.route('/api/auth/login', methods=['POST'])
+def login():
 
-@app.route('/api/cars/<car_id>', methods=['GET'])
-@requires_auth
-def car_details(car_id):       
-    if request.method == 'GET':
-        f=False
-        c=Cars.query.filter_by(id=car_id).first()
-        favs=Favourites.query.filter((Favourites.car_id==car_id) & (Favourites.user_id==g.current_user["userid"])).first()
-        if favs!=None:
-            f=True
-        return jsonify(id=c.id,model=c.model,make=c.make,user_id=c.user_id,car_type=c.car_type,
-            description=c.description,price=c.price,photo=c.photo,
-            transmission=c.transmission,colour=c.colour,year=c.year,Faved=f)
+    form = LoginForm()
+    errors = []
 
-@app.route('/api/cars/<car_id>/favourite', methods=['POST'])
-@requires_auth
-def favourite_car(car_id):       
     if request.method == 'POST':
-        userid=g.current_user['userid']
-        fav=Favourites(car_id,userid)
-        db.session.add(fav)
+
+        if form.validate_on_submit()==True:
+
+            username = form.username.data
+            password = form.password.data
+            
+            user = Users.query.filter_by(username=username).first()
+
+            if user is not None and check_password_hash(user.password, password):
+                payload = {
+                    'id': user.id,
+                    'username': user.username,
+                    'iat': datetime.datetime.now(datetime.timezone.utc),
+                    'exp': datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=45)
+                }
+
+                token = jwt.encode(payload, app.config['SECRET_KEY'], algorithm='HS256')
+
+                return jsonify(data={'message': 'Login Successful', 'token': token, 'id': user.id})
+            else:
+                errors.append('Incorrect username or password')
+        return jsonify(errors=form_errors(form) + errors)
+
+# #Logout a user.
+# #HTTP Method: 'POST'
+@app.route('/api/auth/logout', methods=['POST'])
+@requires_auth
+def logout():
+    return jsonify(data={'message': 'User Logout was successful'})
+
+#Add new cars ['POST'].
+#HTTP Method: 'POST'
+@app.route('/api/cars', methods=['POST'])
+@requires_auth
+def cars():
+
+    form = CarForm()
+
+    if request.method == 'POST':
+
+        if form.validate_on_submit()==True:
+
+            make = form.make.data
+            model = form.model.data
+            colour = form.colour.data
+            year = form.year.data
+            price = format(float(form.price.data), '.2f')
+            car_type = form.car_type.data
+            transmission = form.transmission.data
+            description = form.description.data
+            photo = form.photo.data
+
+            filename = secure_filename(photo.filename)
+
+            photo.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+
+            newCar = Cars(description=description, make=make, model=model, colour=colour,
+                        year=year, transmission=transmission, car_type=car_type, price=price,
+                        photo=filename, userid=g.current_user["id"])
+
+            db.session.add(newCar)
+            db.session.commit()
+            
+
+            data = [
+                {
+                'id': g.current_user["id"],
+                'description': description,
+                'year': year,
+                'make': make,
+                'model': model,
+                'colour': colour,
+                'transmission': transmission,
+                'type': car_type,
+                'price': price,
+                'photo': "/uploads/"+filename,
+                'user_id': g.current_user["id"]
+            }]
+            message="Car successfully added."
+
+            return jsonify(data=data,message=message)
+
+        else:
+            return jsonify(errors=form_errors(form))
+
+#Return all cars ['GET'] 
+#HTTP Method: 'GET'
+@app.route('/api/cars', methods=["GET"])
+@requires_auth
+def allcars():
+
+    cars = db.session.query(Cars).all()
+    data = []
+
+    if cars is None:
+        return jsonify({"message": "No cars available", 'errors': []})
+
+    for car in cars:
+        data.append({
+            'id': car.id,
+            'description': car.description,
+            'year': car.year,
+            'make': car.make,
+            'model': car.model,
+            'colour': car.colour,
+            'transmission': car.transmission,
+            'type': car.car_type,
+            'price': car.price,
+            'photo': "/uploads/"+car.photo,
+            'user_id': car.userid
+        })
+
+    return jsonify(data=data)
+
+#Get Details of a specific car.
+#HTTP Method: 'GET'
+@app.route("/api/cars/<car_id>", methods=["GET"])
+@requires_auth
+def get_car(car_id):
+
+    car = Cars.query.filter_by(id=car_id).first()
+    if car is None:
+        return jsonify({"message": "Car selected does not exist", 'errors': []})
+
+    data = [{
+            'id': car.id,
+            'description': car.description,
+            'year': car.year,
+            'make': car.make,
+            'model': car.model,
+            'colour': car.colour,
+            'transmission': car.transmission,
+            'type': car.car_type,
+            'price': car.price,
+            'photo': "/uploads/"+car.photo,
+            'user_id': car.userid
+    }]
+
+    isFav = False
+    test = Favourites.query.filter(Favourites.car_id == car.id).filter(Favourites.user_id == g.current_user['id'] ).first()
+
+    if test is not None:
+        isFav = True
+
+    return jsonify(data=data, isFav=isFav)
+
+#Add car to Favourites for logged in user.
+#HTTP Method: 'POST'
+@app.route("/api/cars/<car_id>/favourite", methods=["POST"])
+@requires_auth
+def favourite(car_id):
+    json_favourite= request.get_json(silent=True)
+    cid=json_favourite.get("car_id")
+    uid=json_favourite.get("user_id")
+
+    isFav=Favourites.query.filter(Favourites.car_id == cid).filter(Favourites.user_id == uid ).first()
+   
+    if isFav== None:
+        favourite = Favourites(car_id=cid, user_id=uid)
+        db.session.add(favourite)
         db.session.commit()
-        return jsonify(message="Car added as Favourite!")
+        data = {
+            'message': 'Car Successfully Favourited',
+            'id': car_id
+        }
+        return jsonify(data=data)
+    return jsonify({"warning":"Car is already added to Favourites"})
 
-@app.route('/api/users/<user_id>', methods=['GET'])
-def user_details(user_id):       
-    if request.method == 'GET':
-        u=Users.query.filter_by(id=user_id).first()
-        user={}
-        user['id']=u.id
-        user['username']=u.username
-        user['name']=u.name
-        user['email']=u.email
-        user["location"]=u.location
-        user["biography"]=u.biography        
-        user["photo"]=u.photo
-        date = u.join_on
-        user["join_on"]=u.date.strftime("%B %d, %Y")
-        return jsonify(user=user)
 
-@app.route('/api/users/<user_id>/favourites', methods=['GET'])
+
+@app.route("/api/cars/<car_id>/favourite/remove", methods=["POST"])
 @requires_auth
-def user_favourites(user_id):  
-    favcars=[]     
-    if request.method == 'GET':
-        favouritecar=Favourites.query.filter_by(user_id=user_id).all()
-        for x in favouritecar:
-            c=Cars.query.filter_by(id=x.car_id).first()
-            car={}
-            car['id']=c.id
-            car["user_id"]=c.user_id
-            car["year"]=c.year        
-            car["price"]=c.price
-            car["photo"]=c.photo
-            car["make"]=c.make
-            car["model"]=c.model
-            favcars.append(car)
-        return jsonify(favcars=favcars)
+def remove_favourite(car_id):
 
-@app.route('/api/search',methods=["GET"])
+    fav = Favourites.query.filter(Favourites.car_id == car_id).filter(Favourites.user_id == g.current_user["id"] ).first()
+
+    db.session.delete(fav)
+    db.session.commit()
+
+    data = {
+        'message': 'Unfavourite',
+        'id': car_id
+    }
+
+    return jsonify(data=data)
+
+#Search for cars by make or model.
+#HTTP Method: 'GET'
+@app.route('/api/search', methods=['GET'])
 @requires_auth
-def car_search():
-    search=[]
-    if request.method=="GET":
-        make=request.args.get('searchbymake')
-        model=request.args.get('searchbymodel')
-        findcars= Cars.query.filter((Cars.make.like(make)|Cars.model.like(model)))
-        for i in findcars:
-            car={}
-            car['id']=i.id
-            car["user_id"]=i.user_id
-            car["year"]=i.year            
-            car["price"]=i.price
-            car["photo"]=i.photo
-            car["make"]=i.make
-            car["model"]=i.model
-            search.append(car)
-        return jsonify(searchedcars=search)
+def search():
 
-@login_manager.user_loader
-def load_user(id):
-    return Users.query.get(int(id))
+    form = ExploreForm(request.args)
+
+    
+    make = form.make.data
+    model = form.model.data
+    
+    if (make == "") and (model != ""):
+        cars = Cars.query.filter_by(model=model).all()
+    elif (make != "") and (model == ""):
+        cars = Cars.query.filter_by(make=make).all()
+    elif (make != "") and (model != ""):
+        cars = Cars.query.filter_by(make=make,model=model).all()
+    else:
+        cars = cars = db.session.query(Cars).all()
+
+    data = []
+
+    if cars is None:
+        return jsonify({"message": "No cars found", 'errors': []})
+
+    for car in cars:
+        data.append({
+            'id': car.id,
+            'description': car.description,
+            'year': car.year,
+            'make': car.make,
+            'model': car.model,
+            'colour': car.colour,
+            'transmission': car.transmission,
+            'type': car.car_type,
+            'price': car.price,
+            'photo': "/uploads/"+car.photo,
+            'user_id': car.userid
+        })
+
+    return jsonify(data=data)
+   
+#Get Details of a user.
+#HTTP Method: 'GET'
+@app.route("/api/users/<user_id>", methods=["GET"])
+@requires_auth
+def get_user(user_id):
+
+    user = Users.query.filter_by(id=user_id).first()
+
+    if user is None:
+        return jsonify({"message": "User does not exist", 'errors': []})
+
+    data = {
+        'id': user.id,
+        'username': user.username,
+        'name': user.name,
+        'photo': "/uploads/"+user.photo,
+        'email': user.email,
+        'location': user.location,
+        'biography': user.biography,
+        'date_joined': convert(user.date)
+    }
+    return jsonify(data=data)
+
+def convert(datetime):
+    months = {'1':'January','2':'February','3':'March','4':'April','5':'May','6':'June',
+'7':'July','8':'August','9':'September','10':'October','11':'November','12':'December'}
+    dt = datetime.strptime(str(datetime), '%Y-%m-%d %H:%M:%S')
+    return months.get(str(dt.month))+" "+str(dt.day)+","+str(dt.year)
+
+#Get cars that a user has favourited.
+#HTTP Method: 'GET'
+@app.route("/api/users/<user_id>/favourites", methods=["GET"])
+@requires_auth
+def getoneUsersFavourites(user_id):
+
+    favourites = Favourites.query.filter_by(user_id=user_id).all()
+    data = []
+
+    if favourites is None:
+        return jsonify({"message": "No favourite available", 'errors': []})
+
+    for favourite in favourites:
+
+        car_id = favourite.car_id
+        car = Cars.query.filter_by(id=car_id).first()
+
+        data.append({
+            'id': car.id,
+            'description': car.description,
+            'year': car.year,
+            'make': car.make,
+            'model': car.model,
+            'colour': car.colour,
+            'transmission': car.transmission,
+            'type': car.car_type,
+            'price': car.price,
+            'photo': "/uploads/"+car.photo,
+            'user_id': car.userid
+        })
+    return jsonify(data=data)
+
+@app.route('/uploads/<filename>')
+def get_image(filename):
+    root_dir = os.getcwd()
+    return send_from_directory(os.path.join(root_dir,app.config['UPLOAD_FOLDER']),filename)
 
 # Please create all new routes and view functions above this route.
 # This route is now our catch all route for our VueJS single page
@@ -309,9 +423,17 @@ def index(path):
     Because we use HTML5 history mode in vue-router we need to configure our
     web server to redirect all routes to index.html. Hence the additional route
     "/<path:path".
+
     Also we will render the initial webpage and then let VueJS take control.
     """
     return render_template('index.html')
+
+
+
+
+@login_manager.user_loader
+def load_user(id):
+    return UserProfile.query.get(int(id))
 
 # Here we define a function to collect form errors from Flask-WTF
 # which we can later use
@@ -328,15 +450,18 @@ def form_errors(form):
 
     return error_messages
 
+
 ###
 # The functions below should be applicable to all Flask apps.
 ###
+
 
 @app.route('/<file_name>.txt')
 def send_text_file(file_name):
     """Send your static text file."""
     file_dot_text = file_name + '.txt'
     return app.send_static_file(file_dot_text)
+
 
 @app.after_request
 def add_header(response):
@@ -349,11 +474,12 @@ def add_header(response):
     response.headers['Cache-Control'] = 'public, max-age=0'
     return response
 
+
 @app.errorhandler(404)
 def page_not_found(error):
     """Custom 404 page."""
     return render_template('404.html'), 404
 
+
 if __name__ == '__main__':
     app.run(debug=True, host="0.0.0.0", port="8080")
-    
